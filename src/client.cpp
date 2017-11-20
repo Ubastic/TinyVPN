@@ -40,7 +40,7 @@ void Client::run() {
             } else if (event.data.fd == _socket.fd()) {
 #ifdef DEBUG
                 struct sockaddr_in src;
-                socklen_t len;
+                socklen_t len = sizeof(src);
                 int nread = _socket.recvfrom(buf, sizeof(buf), reinterpret_cast<struct sockaddr*>(&src), &len);
                 char ip[128];
                 inet_ntop(AF_INET, &src.sin_addr, ip, sizeof(ip));
