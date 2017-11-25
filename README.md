@@ -59,3 +59,7 @@ $ sudo ./server --port <端口> --tun_addr <tun设备IP>
 ```
 $ iptables -t nat -A POSTROUTING -s <tun设备子网>-o eth0 -j SNAT --to-source <出口ip(例如eth0的ip)>
 ```
+3. 打开路由功能
+```
+$ echo "1" > /proc/sys/net/ipv4/ip_forward
+```
