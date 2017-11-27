@@ -2,12 +2,14 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <netinet/ip.h>
 #include <assert.h>
+
 
 #ifdef DEBUG
 #include <iostream>
 #endif
+
+#include "net.h"
 
 namespace vpn {
 
@@ -80,6 +82,12 @@ void Server::run() {
                 if (ip == nullptr) {
                     continue;
                 }
+                
+#if 1
+                IP my_ip(buf, nread, IP::ALLOC);
+                std::cout << my_ip.saddr() << std::endl;
+                std::cout << my_ip.daddr() << std::endl;
+#endif
 
                 Tins::IP::address_type src_addr = ip->src_addr();
                 int port = get_sport(ip);
