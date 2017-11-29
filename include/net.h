@@ -11,92 +11,110 @@
 
 namespace vpn {
 
-class Protocol {
-public:
-    /* Reuse or alloc memory. */
-    enum Option {
-        REUSE = 0,
-        ALLOC = 1
-    };
-    Protocol(char* data, int size, Option opt);
-    Protocol(const Protocol&) = delete;
-    Protocol& operator=(const Protocol&) = delete;
-    virtual ~Protocol();
-
-    /* Find inner protocol. */
-    enum Type {
-        TCP = 0,
-        UDP,
-        IP
-    };
-    Protocol* find(Type p);
-
-    /* Checksum will be computed iff raw_data() is called. */
-    virtual int checksum() = 0;
-    virtual void calc_checksum() = 0;
-
-    const char* raw_data();
-    virtual Type get_type() = 0;
-protected:
-    /* TODO: How to do better? */
-    int size()  { return _size; }
-    char* data() { return _data; }
-    void set_inner(Protocol *p) { _inner.reset(p); }
-private:
-    std::shared_ptr<Protocol>  _inner;
-    char      *_data;
-    int        _size;
-    Option     _option;
+enum Protocol {
+    P_ICMP = 0,
+    P_TCP,
+    P_UDP,
+    P_IP,
+    P_NSY  // Not support yet 
 };
 
-class TCP : public Protocol {
+class Inner {
 public:
-    TCP(char* data, int size, Option opt);
-    ~TCP() {  }
-    void calc_checksum();
-    int checksum() { return ntohs(_tcp->check); }
-    Type get_type() { return Type::TCP; }
+    Inner() = default;
+    virtual ~Inner() {  }
+};
+
+class TransLayer : public Inner {
+public:
+    TransLayer() = default;
+    virtual ~TransLayer() {  }
+    TransLayer& operator=(const TransLayer&) = delete;
+    TransLayer(const TransLayer&) = delete;
+
+    virtual int sport() = 0;
+    virtual int dport() = 0;
+    virtual int set_sport(int port) = 0;
+    virtual int set_dport(int port) = 0;
+
+    virtual int checksum() = 0;
+    virtual void calc_checksum(const struct iphdr *ip) = 0;
+};
+
+class TCP : public TransLayer {
+public:
+    /* Reuse memory(char *data) */
+    explicit TCP(char *data);
+    ~TCP() = default;
+    TCP& operator=(const TCP&) = delete;
+    TCP(const TCP&) = delete;
 
     int sport() { return ntohs(_tcp->source); }
     int dport() { return ntohs(_tcp->dest); }
-    void set_sport(int port) { _tcp->source = htons(port); }
-    void set_dport(int port) { _tcp->dest = htons(port); }
+    int set_sport(int port) { return _tcp->source = htons(port); }
+    int set_dport(int port) { return _tcp->dest = htons(port); }
+
+    int checksum() { return ntohs(_tcp->check); }
+    void calc_checksum(const struct iphdr *ip);
 private:
-    struct tcphdr* _tcp;
+    struct tcphdr *_tcp;
 };
 
-class UDP : public Protocol {
+class UDP : public TransLayer {
 public:
-    UDP(char* data, int size, Option opt);
-    ~UDP() {  }
-    void calc_checksum();
-    int checksum() { return ntohs(_udp->check); }
-    Type get_type() { return Type::UDP; }
+    /* Reuse memory(char *data) */
+    explicit UDP(char *data);
+    ~UDP() = default;
+    UDP& operator=(const UDP&) = delete;
+    UDP(const UDP&) = delete;
 
     int sport() { return ntohs(_udp->source); }
     int dport() { return ntohs(_udp->dest); }
-    void set_sport(int port) { _udp->source = htons(port); }
-    void set_dport(int port) { _udp->dest = htons(port); }
+    int set_sport(int port) { return _udp->source = htons(port); }
+    int set_dport(int port) { return _udp->dest = htons(port); }
+
+    int checksum() { return ntohs(_udp->check); }
+    void calc_checksum(const struct iphdr *ip);
 private:
-    struct udphdr* _udp;
+    struct udphdr *_udp;
 };
 
-class IP : public Protocol {
+// TODO
+class ICMP : public Inner {
 public:
-    IP(char* data, int size, Option opt);
-    ~IP() {  }
-    void calc_checksum();
-    int checksum() { return ntohs(_ip->check); }
-    Type get_type() { return Type::IP; }
+private:
+};
 
-    int version() { return ntohs(_ip->version); }
-    int protocol() { return ntohs(_ip->protocol); }
+class IP {
+public:
+    /* Reuse or alloc memory */
+    enum Memory {
+        REUSE = 0,
+        ALLOC = 1
+    };
+    explicit IP(char *data, int size, Memory option);
+    ~IP();
+    IP& operator=(const IP&) = delete;
+    IP(const IP&) = delete;
+
     std::string saddr();
     std::string daddr();
-    void set_saddr(const std::string &addr);
-    void set_daddr(const std::string &addr);
+    void set_saddr(const std::string& addr);
+    void set_daddr(const std::string& addr);
+
+    Protocol protocol();
+
+    int checksum() { return ntohs(_ip->check); }
+    void calc_checksum();
+
+    const char* raw_data();
 private:
-    struct iphdr* _ip;
+    Memory   _option;
+    Inner   *_inner;
+    char    *_data;
+    struct iphdr  *_ip;
+
+    void init(char *data, int isze, Memory option);
 };
 
 } /* namespace vpn */

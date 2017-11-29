@@ -1,7 +1,7 @@
 #include "net.h"
 
-#include <arpa/inet.h>
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* The FALLTHROUGH_INTENDED macro can be used to annotate implicit fall-through
@@ -12,111 +12,50 @@
 #endif
 
 namespace vpn {
+    
+TCP::TCP(char *data) : _tcp(reinterpret_cast<struct tcphdr*>(data)) {  }
+UDP::UDP(char *data) : _udp(reinterpret_cast<struct udphdr*>(data)) {  }
 
-Protocol::Protocol(char* data, int size, Option opt)
-    : _inner(nullptr), _data(nullptr),
-      _size(size), _option(opt) {
-    switch (opt) {
+IP::IP(char *data, int size, Memory option)
+    : _option(option), _inner(nullptr), _data(nullptr), _ip(nullptr) {
+    assert(data && size >= 0);
+    assert(static_cast<unsigned long long>(size) >= sizeof(struct iphdr));
+    init(data, size, option);
+}
+
+void IP::init(char *data, int size, Memory option) {
+    switch (option) {
         case REUSE:
             _data = data;
             break;
         case ALLOC:
-            _data = new char[size];
+            _data = reinterpret_cast<char*>(malloc(size));
             memcpy(_data, data, size);
             break;
         default:
-            assert(0);
+            assert(false);
+    }
+
+    _ip = reinterpret_cast<struct iphdr*>(_data);
+
+    if (_ip->protocol == IPPROTO_TCP) {
+        _inner = new class TCP(_data + sizeof(struct iphdr));
+    } else if (_ip->protocol == IPPROTO_UDP) {
+        _inner = new class UDP(_data + sizeof(struct iphdr));
     }
 }
 
-Protocol::~Protocol() {
-    switch(_option) {
+IP::~IP() {
+    switch (_option) {
         case ALLOC:
-            delete _data;
+            free(_data);
             FALLTHROUGH_INTENDED;
         default:
+            if (_inner) {
+                delete _inner;
+            }
             break;
     }
-}
-
-Protocol* Protocol::find(Type p) {
-    while (_inner && _inner->get_type() != p) {
-        _inner = _inner->_inner;
-    }
-    return _inner.get();
-}
-
-const char* Protocol::raw_data() {
-    if (_inner) {
-        _inner->calc_checksum();
-    }
-    calc_checksum();
-    return _data;
-}
-
-/* Inner function of computing checksum */
-static uint16_t __checksum(const void* data, int size) {
-    assert(data && size >= 8);
-
-    uint16_t checksum = 0;
-    const uint16_t *word = reinterpret_cast<const uint16_t*>(data);
-
-    int nleft = size;
-    while (nleft > 1) {
-        checksum += *word;
-        word += 2;
-        nleft -= 2;
-    }
-
-    if (nleft) {
-        checksum += *reinterpret_cast<const uint8_t*>(word);
-    }
-
-    checksum = (checksum & 0xffff) + (checksum >> 16);
-    checksum = (checksum & 0xffff) + (checksum >> 16);
-
-    return ~checksum;
-}
-
-TCP::TCP(char* data, int size, Option opt)
-    : Protocol(data, size, opt), _tcp(nullptr) {
-    assert(size >= static_cast<int>(sizeof(struct tcphdr)));
-    _tcp = reinterpret_cast<struct tcphdr*>(Protocol::data());
-}
-
-void TCP::calc_checksum() {
-
-}
-
-UDP::UDP(char* data, int size, Option opt)
-    : Protocol(data, size, opt), _udp(nullptr) {
-    assert(size >= static_cast<int>(sizeof(struct udphdr)));
-    _udp = reinterpret_cast<struct udphdr*>(Protocol::data());
-}
-
-void UDP::calc_checksum() {
-
-}
-
-IP::IP(char* data, int size, Option opt)
-    : Protocol(data, size, opt), _ip(nullptr) {
-    assert(size >= static_cast<int>(sizeof(struct iphdr)));
-    _ip = reinterpret_cast<struct iphdr*>(Protocol::data());
-
-    char* ptr = Protocol::data() + _ip->ihl * 4;
-    Protocol *inner = nullptr;
-    if (_ip->protocol == IPPROTO_TCP) {
-        inner = new class TCP(ptr, _ip->tot_len - _ip->ihl * 4, REUSE);
-    } else if (_ip->protocol == IPPROTO_UDP) {
-        inner = new class UDP(ptr, _ip->tot_len - _ip->ihl * 4, REUSE);
-    }
-
-    Protocol::set_inner(inner);
-}
-
-void IP::calc_checksum() {
-    _ip->check = 0;
-    _ip->check = htons(__checksum(_ip, _ip->ihl * 5));
 }
 
 std::string IP::saddr() {
@@ -127,17 +66,91 @@ std::string IP::saddr() {
 
 std::string IP::daddr() {
     char buf[32];
-    inet_ntop(AF_INET, &_ip->saddr, buf, sizeof(buf));
+    inet_ntop(AF_INET, &_ip->daddr, buf, sizeof(buf));
     return buf;
 }
 
-void IP::set_saddr(const std::string &addr) {
+void IP::set_saddr(const std::string& addr) {
     inet_pton(AF_INET, addr.c_str(), &_ip->saddr);
 }
 
-void IP::set_daddr(const std::string &addr) {
-    inet_pton(AF_INET, addr.c_str(), &_ip->daddr);
+void IP::set_daddr(const std::string& addr) {
+    inet_pton(AF_INET, addr.c_str(), &_ip->saddr);
+}
+
+Protocol IP::protocol() {
+    if (_ip->protocol == IPPROTO_TCP) {
+        return P_TCP;
+    } else if (_ip->protocol == IPPROTO_UDP) {
+        return P_UDP;
+    } else {
+        return P_NSY;
+    }
+}
+
+/* For UDP/TCP compute checksum */
+struct MockHeader {
+    uint32_t    saddr;
+    uint32_t    daddr;
+    uint8_t     zero;
+    uint8_t     protocol;
+    uint16_t    tot_len;
+    /* UDP/TCP origin header and data */
+    char        origin[0];
+};
+
+/* Same as class MockHeaderRAII */
+using MockHeaderPtr = std::shared_ptr<MockHeader>;
+
+/* Inner function of computing checksum */
+static uint16_t __checksum(const void* data, int size) {
+    assert(data && size >= 8);
+
+    uint32_t checksum = 0;
+    const uint16_t *word = reinterpret_cast<const uint16_t*>(data);
+
+    while (size > 1) {
+        checksum += *word++;
+        size -= 2;
+    }
+
+    if (size) {
+        checksum += *reinterpret_cast<const uint8_t*>(word);
+    }
+
+    checksum = (checksum & 0xffff) + (checksum >> 16);
+    checksum = (checksum & 0xffff) + (checksum >> 16);
+
+    return static_cast<uint16_t>(~checksum);
+};
+
+void TCP::calc_checksum(const struct iphdr *ip) {
+    int tot_len = sizeof(MockHeader) + ip->tot_len - sizeof(struct iphdr);
+    MockHeaderPtr tcp_header(reinterpret_cast<MockHeader*>(malloc(tot_len)));
+    tcp_header->saddr = ip->saddr;
+    tcp_header->daddr = ip->daddr;
+    tcp_header->zero = 0;
+    tcp_header->protocol = IPPROTO_TCP;
+    tcp_header->tot_len = htons(tot_len);
+
+    _tcp->check = __checksum(tcp_header.get(), tot_len);
+}
+
+void UDP::calc_checksum(const struct iphdr *ip) {
+    int tot_len = sizeof(MockHeader) + ip->tot_len - sizeof(struct iphdr);
+    MockHeaderPtr udp_header(reinterpret_cast<MockHeader*>(malloc(tot_len)));
+    udp_header->saddr = ip->saddr;
+    udp_header->daddr = ip->daddr;
+    udp_header->zero = 0;
+    udp_header->protocol = IPPROTO_UDP;
+    udp_header->tot_len = htons(tot_len);
+
+    _udp->check = __checksum(udp_header.get(), tot_len);
+}
+
+void IP::calc_checksum() {
+    _ip->check = 0;
+    _ip->check = htons(__checksum(_ip, sizeof(struct iphdr)));
 }
 
 } /* namespace vpn */
-
