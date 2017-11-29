@@ -103,16 +103,19 @@ public:
     void set_daddr(const std::string& addr);
 
     Protocol protocol();
+    Inner* inner() { return _inner; };
+    int size() { return _size; }
 
     int checksum() { return ntohs(_ip->check); }
     void calc_checksum();
 
     const char* raw_data();
 private:
+    struct iphdr  *_ip;
     Memory   _option;
     Inner   *_inner;
     char    *_data;
-    struct iphdr  *_ip;
+    int      _size;
 
     void init(char *data, int isze, Memory option);
 };

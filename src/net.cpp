@@ -17,7 +17,7 @@ TCP::TCP(char *data) : _tcp(reinterpret_cast<struct tcphdr*>(data)) {  }
 UDP::UDP(char *data) : _udp(reinterpret_cast<struct udphdr*>(data)) {  }
 
 IP::IP(char *data, int size, Memory option)
-    : _option(option), _inner(nullptr), _data(nullptr), _ip(nullptr) {
+    : _ip(nullptr), _option(option), _inner(nullptr), _data(nullptr), _size(size) {
     assert(data && size >= 0);
     assert(static_cast<unsigned long long>(size) >= sizeof(struct iphdr));
     init(data, size, option);
@@ -151,6 +151,20 @@ void UDP::calc_checksum(const struct iphdr *ip) {
 void IP::calc_checksum() {
     _ip->check = 0;
     _ip->check = htons(__checksum(_ip, sizeof(struct iphdr)));
+}
+
+const char* IP::raw_data() {
+    if (_inner) {
+        if (protocol() == P_TCP || protocol() == P_UDP) {
+            /* Safe down cast */
+            TransLayer *real_type = dynamic_cast<TransLayer*>(_inner);
+            real_type->calc_checksum(_ip);
+        } else {
+            return nullptr;
+        }
+    }
+    calc_checksum();
+    return _data;
 }
 
 } /* namespace vpn */

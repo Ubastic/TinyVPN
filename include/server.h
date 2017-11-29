@@ -7,11 +7,9 @@
 
 #include "common.h"
 
-#include "tins/tins.h"
-
 namespace vpn {
 
-using AddrPort = std::pair<Tins::IP::address_type, int>;
+using AddrPort = std::pair<std::string, int>;
 
 class Server {
 public:
@@ -29,10 +27,6 @@ private:
     std::map<AddrPort, AddrPort>  _snat_map;
     std::map<AddrPort, AddrPort>  _sock_map;
     std::vector<bool> _port_pool;
-
-    std::shared_ptr<Tins::IP> get_ip_packet(const uint8_t* buf, int size);
-    int get_sport(std::shared_ptr<Tins::IP> ip);
-    int get_dport(std::shared_ptr<Tins::IP> ip);
 };
 
 } /* namespace vpn */

@@ -62,7 +62,7 @@ Socket::Socket(Domain d, Type t) : _fd(-1), _type(-1), _domain(-1) {
             break;
         default:
             /* nerver do this */
-            assert(0);
+            assert(false);
     }
     switch(t) {
         case TCP:
@@ -73,7 +73,7 @@ Socket::Socket(Domain d, Type t) : _fd(-1), _type(-1), _domain(-1) {
             break;
         default:
             /* nerver do this */
-            assert(0);
+            assert(false);
     }
     _fd = socket(_domain, _type, 0);
 }
