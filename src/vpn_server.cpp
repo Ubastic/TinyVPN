@@ -23,7 +23,6 @@ void Server::run() {
     assert(_tun.up() == 0);
     assert(_socket.bind(_port) == 0);
 
-    char buf[4096];
     for ( ; ; ) {
         std::vector<struct epoll_event> events(_epoll.wait());
 
@@ -49,21 +48,24 @@ void Server::run() {
 void Server::client2server() {
     char buf[4096];
 
-    struct sockaddr sock;
+    struct sockaddr_in sock;
     socklen_t len = sizeof(sock);
-    int nread = _socket.recvfrom(buf, sizeof(buf), &sock, &len);
+    int nread = _socket.recvfrom(buf, sizeof(buf),
+            reinterpret_cast<struct sockaddr*>(&sock), &len);
     assert(nread != -1);
-  
-    std::shared_ptr<IP> ip = get_ip_packet(buf, nread);
-    if (ip->protocol() == P_TCP || ip->protocol() == P_UDP) {
-        ip->set_saddr(_tun.ip());
 
+    std::shared_ptr<IP> ip = get_ip_packet(buf, nread);
+    if (ip == nullptr) {
+        return ;
+    }
+
+    if (ip->protocol() == P_TCP || ip->protocol() == P_UDP) {
         /* Safe down cast */
         TransLayer *trans = dynamic_cast<TransLayer*>(ip->inner());
         assert(trans != nullptr);
 
-        ip->set_saddr(_tun.ip());
         trans->set_sport(_nat.snat(ip->saddr(), trans->sport(), sock));
+        ip->set_saddr(_tun.ip());
 
         _tun.write(ip->raw_data(), ip->size());
     } else {
@@ -80,17 +82,25 @@ void Server::server2client() {
 
     int nread = _tun.read(buf, sizeof(buf));
     assert(nread != -1);
-  
+
     std::shared_ptr<IP> ip = get_ip_packet(buf, nread);
+    if (ip == nullptr) {
+        return ;
+    }
+
     if (ip->protocol() == P_TCP || ip->protocol() == P_UDP) {
         /* Safe down cast */
         TransLayer *trans = dynamic_cast<TransLayer*>(ip->inner());
-        std::shared_ptr<OriginData> origin = _nat.dnat(trans->dport()); 
+        assert(trans != nullptr);
+        std::shared_ptr<OriginData> origin = _nat.dnat(trans->dport());
 
         ip->set_daddr(origin->addr);
         trans->set_dport(origin->port);
-        
-        _socket.sendto(buf, nread, &(origin->sock), sizeof(origin->sock));
+
+        _socket.sendto(ip->raw_data(), ip->size(),
+                reinterpret_cast<struct sockaddr*>(&(origin->sock)), sizeof(origin->sock));
+    } else {
+        return ;
     }
 
 #ifdef DEBUG
@@ -99,6 +109,9 @@ void Server::server2client() {
 }
 
 std::shared_ptr<IP> Server::get_ip_packet(char *buf, int size) {
+    if (buf == nullptr) {
+        return nullptr;
+    }
     if (static_cast<size_t>(size) < sizeof(struct iphdr)) {
         return nullptr;
     }

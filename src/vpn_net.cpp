@@ -18,8 +18,6 @@ UDP::UDP(char *data) : _udp(reinterpret_cast<struct udphdr*>(data)) {  }
 
 IP::IP(char *data, int size, Memory option)
     : _ip(nullptr), _option(option), _inner(nullptr), _data(nullptr), _size(size) {
-    assert(data && size >= 0);
-    assert(static_cast<unsigned long long>(size) >= sizeof(struct iphdr));
     init(data, size, option);
 }
 

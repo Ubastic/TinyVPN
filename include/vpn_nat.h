@@ -9,7 +9,7 @@
 namespace vpn {
 
 struct NATNode {
-    struct sockaddr sock;
+    struct sockaddr_in sock;
     std::string  addr;
     time_t       use;
     int          port;
@@ -22,7 +22,7 @@ struct NATNode {
 };
 
 struct OriginData {
-    struct sockaddr sock;
+    struct sockaddr_in sock;
     std::string addr;
     int port;
 };
@@ -33,9 +33,9 @@ public:
     ~NAT();
     NAT(const NAT&) = delete;
     NAT& operator=(const NAT&) = delete;
-    
+
     /* Return a new port */
-    int snat(const std::string& addr, int port, struct sockaddr sock);
+    int snat(const std::string& addr, int port, struct sockaddr_in sock);
     /* Return the OriginData
      * Port is returned by a previous snat()
      * */
@@ -52,7 +52,7 @@ private:
 
     void remove(NATNode *node);
     void append(NATNode *list, NATNode *node);
-    
+
     /* Prune _in_use when _nat is empty */
     void prune();
 
