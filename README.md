@@ -4,24 +4,9 @@
 
 # 安装
 
-TinyVPN使用了gflags和libtins第三方库，使用cmake编译
+TinyVPN使用了gflags第三方库，使用cmake编译
 
-所以在编译之前需要安装libpcap、libcrypto和cmake
-
-可以使用
-
-```
-apt-get install libpcap-dev libssl-dev cmake
-```
-
-或
-
-```
-yum install libpcap-devel openssl-devel cmake
-```
-来安装依赖的软件包
-
-最后使用cmake外部编译即可
+使用cmake外部编译即可
 
 ```
 cd TinyVPN
