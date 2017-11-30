@@ -108,7 +108,7 @@ int Socket::sendto(const void* in, int size, const std::string& addr, int port) 
 }
 
 int Socket::sendto(const void* in, int size, struct sockaddr* sock, int sock_len) {
-    return ::sendto(_fd, in, size, 0, sock, size);
+    return ::sendto(_fd, in, size, 0, sock, sock_len);
 }
 
 int Socket::recvfrom(char* out, int size, struct sockaddr* src, socklen_t* len) {
