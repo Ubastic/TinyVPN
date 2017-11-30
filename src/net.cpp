@@ -12,7 +12,7 @@
 #endif
 
 namespace vpn {
-    
+
 TCP::TCP(char *data) : _tcp(reinterpret_cast<struct tcphdr*>(data)) {  }
 UDP::UDP(char *data) : _udp(reinterpret_cast<struct udphdr*>(data)) {  }
 
@@ -39,9 +39,9 @@ void IP::init(char *data, int size, Memory option) {
     _ip = reinterpret_cast<struct iphdr*>(_data);
 
     if (_ip->protocol == IPPROTO_TCP) {
-        _inner = new class TCP(_data + sizeof(struct iphdr));
+        _inner = new TCP(_data + sizeof(struct iphdr));
     } else if (_ip->protocol == IPPROTO_UDP) {
-        _inner = new class UDP(_data + sizeof(struct iphdr));
+        _inner = new UDP(_data + sizeof(struct iphdr));
     }
 }
 
@@ -75,7 +75,7 @@ void IP::set_saddr(const std::string& addr) {
 }
 
 void IP::set_daddr(const std::string& addr) {
-    inet_pton(AF_INET, addr.c_str(), &_ip->saddr);
+    inet_pton(AF_INET, addr.c_str(), &_ip->daddr);
 }
 
 Protocol IP::protocol() {
@@ -89,7 +89,7 @@ Protocol IP::protocol() {
 }
 
 /* For UDP/TCP compute checksum */
-struct MockHeader {
+struct PseudoHeader {
     uint32_t    saddr;
     uint32_t    daddr;
     uint8_t     zero;
@@ -99,8 +99,8 @@ struct MockHeader {
     char        origin[0];
 };
 
-/* Same as class MockHeaderRAII */
-using MockHeaderPtr = std::shared_ptr<MockHeader>;
+/* Same as class PseudoHeaderRAII */
+using PseudoHeaderPtr = std::shared_ptr<PseudoHeader>;
 
 /* Inner function of computing checksum */
 static uint16_t __checksum(const void* data, int size) {
@@ -111,6 +111,9 @@ static uint16_t __checksum(const void* data, int size) {
 
     while (size > 1) {
         checksum += *word++;
+        if (checksum > 0xffff) {
+            checksum = (checksum & 0xffff) + (checksum >> 16);
+        }
         size -= 2;
     }
 
@@ -118,39 +121,52 @@ static uint16_t __checksum(const void* data, int size) {
         checksum += *reinterpret_cast<const uint8_t*>(word);
     }
 
-    checksum = (checksum & 0xffff) + (checksum >> 16);
-    checksum = (checksum & 0xffff) + (checksum >> 16);
-
     return static_cast<uint16_t>(~checksum);
 };
 
 void TCP::calc_checksum(const struct iphdr *ip) {
-    int tot_len = sizeof(MockHeader) + ip->tot_len - sizeof(struct iphdr);
-    MockHeaderPtr tcp_header(reinterpret_cast<MockHeader*>(malloc(tot_len)));
+    _tcp->check = 0;
+
+    /*
+     * ----------------------------------------
+     * | PseudoHeader | TCP Header | TCP Data |
+     * ----------------------------------------
+     * */
+    int tot_len = sizeof(PseudoHeader) + ntohs(ip->tot_len) - sizeof(struct iphdr);
+    PseudoHeaderPtr tcp_header(reinterpret_cast<PseudoHeader*>(malloc(tot_len)));
     tcp_header->saddr = ip->saddr;
     tcp_header->daddr = ip->daddr;
     tcp_header->zero = 0;
     tcp_header->protocol = IPPROTO_TCP;
-    tcp_header->tot_len = htons(tot_len);
+    tcp_header->tot_len = htons(tot_len - sizeof(PseudoHeader));
+    memcpy(tcp_header->origin, _tcp, tot_len - sizeof(PseudoHeader));
 
     _tcp->check = __checksum(tcp_header.get(), tot_len);
 }
 
 void UDP::calc_checksum(const struct iphdr *ip) {
-    int tot_len = sizeof(MockHeader) + ip->tot_len - sizeof(struct iphdr);
-    MockHeaderPtr udp_header(reinterpret_cast<MockHeader*>(malloc(tot_len)));
+    _udp->check = 0;
+
+    /*
+     * ----------------------------------------
+     * | PseudoHeader | UDP Header | UDP Data |
+     * ----------------------------------------
+     * */
+    int tot_len = sizeof(PseudoHeader) + ntohs(ip->tot_len) - sizeof(struct iphdr);
+    PseudoHeaderPtr udp_header(reinterpret_cast<PseudoHeader*>(malloc(tot_len)));
     udp_header->saddr = ip->saddr;
     udp_header->daddr = ip->daddr;
     udp_header->zero = 0;
-    udp_header->protocol = IPPROTO_UDP;
-    udp_header->tot_len = htons(tot_len);
+    udp_header->protocol = IPPROTO_TCP;
+    udp_header->tot_len = htons(tot_len - sizeof(PseudoHeader));
+    memcpy(udp_header->origin, _udp, tot_len - sizeof(PseudoHeader));
 
     _udp->check = __checksum(udp_header.get(), tot_len);
 }
 
 void IP::calc_checksum() {
     _ip->check = 0;
-    _ip->check = htons(__checksum(_ip, sizeof(struct iphdr)));
+    _ip->check = __checksum(_ip, sizeof(struct iphdr));
 }
 
 const char* IP::raw_data() {

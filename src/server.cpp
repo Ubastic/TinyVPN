@@ -4,6 +4,11 @@
 #include <netinet/in.h>
 #include <assert.h>
 
+#ifdef DEBUG
+#include <iostream>
+#endif
+#include <vector>
+
 #include "net.h"
 
 namespace vpn {
@@ -44,8 +49,11 @@ void Server::run() {
                     ip.set_daddr(origin.first);
                     assert(_sock_map.find(origin) != _sock_map.end());
                     AddrPort sock_origin = _sock_map[origin];
-
                     assert(_socket.sendto(ip.raw_data(), ip.size(), sock_origin.first, sock_origin.second) == nread);
+#ifdef DEBUG
+                    std::cout << "recvfrom: " << _tun.ip()
+                        << " sendto: " << sock_origin.first << ":" << sock_origin.second << std::endl;
+#endif
                 }
             } else if (event.data.fd == _socket.fd()) {
                 struct sockaddr_in sock;
@@ -69,8 +77,11 @@ void Server::run() {
                     _sock_map[{src_addr, port}] = {sock_addr, ntohs(sock.sin_port)};
                     ip.set_saddr(_tun.ip());
                     _tun.write(ip.raw_data(), ip.size());
+#ifdef DEBUG
+                    std::cout << "recvfrom: " << sock_addr << ":" << ntohs(sock.sin_port)
+                        << " sendto: " << _tun.ip()<< std::endl;
+#endif
                 }
-
             } else {
                 /* nerver do this */
                 assert(false);
