@@ -5,7 +5,9 @@
 #include <memory>
 #include <map>
 
-#include "common.h"
+#include "vpn_common.h"
+#include "vpn_nat.h"
+#include "vpn_net.h"
 
 namespace vpn {
 
@@ -24,9 +26,12 @@ private:
     Tun     _tun;
     int     _port;
 
-    std::map<AddrPort, AddrPort>  _snat_map;
-    std::map<AddrPort, AddrPort>  _sock_map;
-    std::vector<bool> _port_pool;
+    NAT     _nat;
+
+    void client2server();
+    void server2client();
+
+    std::shared_ptr<IP> get_ip_packet(char *buf, int size);
 };
 
 } /* namespace vpn */

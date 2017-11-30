@@ -1,4 +1,4 @@
-#include "net.h"
+#include "vpn_net.h"
 
 #include <assert.h>
 #include <stdlib.h>

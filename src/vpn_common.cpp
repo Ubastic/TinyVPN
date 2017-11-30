@@ -1,4 +1,4 @@
-#include "common.h"
+#include "vpn_common.h"
 
 #include <linux/if_tun.h>
 #include <sys/socket.h>
@@ -105,6 +105,10 @@ int Socket::sendto(const void* in, int size, const std::string& addr, int port) 
 
     return ::sendto(_fd, in, size, 0,
             reinterpret_cast<struct sockaddr*>(&sock), sizeof(sock));
+}
+
+int Socket::sendto(const void* in, int size, struct sockaddr* sock, int sock_len) {
+    return ::sendto(_fd, in, size, 0, sock, size);
 }
 
 int Socket::recvfrom(char* out, int size, struct sockaddr* src, socklen_t* len) {

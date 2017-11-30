@@ -1,6 +1,6 @@
 #include <arpa/inet.h>
 
-#include "client.h"
+#include "vpn_client.h"
 
 #include "gflags/gflags.h"
 

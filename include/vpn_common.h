@@ -55,6 +55,7 @@ public:
     // just support UDP now
     int bind(int port);
     int sendto(const void* in, int size, const std::string& addr, int port);
+    int sendto(const void* in, int size, struct sockaddr* sock, int sock_len);
     int recvfrom(char* out, int size, struct sockaddr* src, socklen_t* len);
 private:
     int _fd;
