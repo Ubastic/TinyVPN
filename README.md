@@ -1,6 +1,6 @@
 # TinyVPN
 
-一个用来学习的简易vpn，基于tun隧道实现
+一个用来学习的简易vpn，使用tun设备实现
 
 ![](https://github.com/wonter/TinyVPN/blob/master/topology.png?raw=true)
 
