@@ -1,5 +1,6 @@
 #include "vpn_net.h"
 
+#include <netinet/in.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +16,7 @@ namespace vpn {
 
 TCP::TCP(char *data) : _tcp(reinterpret_cast<struct tcphdr*>(data)) {  }
 UDP::UDP(char *data) : _udp(reinterpret_cast<struct udphdr*>(data)) {  }
+ICMP::ICMP(char *data) : _icmp(reinterpret_cast<struct icmphdr*>(data)) {  }
 
 IP::IP(char *data, int size, Memory option)
     : _ip(nullptr), _option(option), _inner(nullptr), _data(nullptr), _size(size) {
@@ -36,10 +38,12 @@ void IP::init(char *data, int size, Memory option) {
 
     _ip = reinterpret_cast<struct iphdr*>(_data);
 
-    if (_ip->protocol == IPPROTO_TCP) {
+    if (protocol() == P_TCP) {
         _inner = new TCP(_data + sizeof(struct iphdr));
-    } else if (_ip->protocol == IPPROTO_UDP) {
+    } else if (protocol() == P_UDP) {
         _inner = new UDP(_data + sizeof(struct iphdr));
+    } else if (protocol() == P_ICMP) {
+        _inner = new ICMP(_data + sizeof(struct iphdr));
     }
 }
 
@@ -81,9 +85,10 @@ Protocol IP::protocol() {
         return P_TCP;
     } else if (_ip->protocol == IPPROTO_UDP) {
         return P_UDP;
-    } else {
-        return P_NSY;
+    } else if (_ip->protocol == IPPROTO_ICMP) {
+        return P_ICMP;
     }
+    return P_NSY;
 }
 
 /* For UDP/TCP compute checksum */
@@ -162,6 +167,11 @@ void UDP::calc_checksum(const struct iphdr *ip) {
     _udp->check = __checksum(udp_header.get(), tot_len);
 }
 
+void ICMP::calc_checksum(const struct iphdr *ip) {
+    _icmp->checksum = 0;
+    _icmp->checksum = __checksum(_icmp, ntohs(ip->tot_len) - sizeof(struct iphdr));
+}
+
 void IP::calc_checksum() {
     _ip->check = 0;
     _ip->check = __checksum(_ip, sizeof(struct iphdr));
@@ -169,13 +179,7 @@ void IP::calc_checksum() {
 
 const char* IP::raw_data() {
     if (_inner) {
-        if (protocol() == P_TCP || protocol() == P_UDP) {
-            /* Safe down cast */
-            TransLayer *real_type = dynamic_cast<TransLayer*>(_inner);
-            real_type->calc_checksum(_ip);
-        } else {
-            return nullptr;
-        }
+        _inner->calc_checksum(_ip);
     }
     calc_checksum();
     return _data;

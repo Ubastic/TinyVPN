@@ -3,6 +3,7 @@
 
 #include <netinet/in.h>
 
+#include <unordered_map>
 #include <string>
 #include <memory>
 
@@ -40,13 +41,22 @@ public:
      * Port is returned by a previous snat()
      * */
     std::shared_ptr<OriginData> dnat(int port);
+
+    /* Available to ICMP */
+    void snat(const std::string& saddr, const std::string& daddr, struct sockaddr_in sock);
+    std::shared_ptr<OriginData> dnat(const std::string& daddr);
 private:
     /* Dummy head of list */
     NATNode  _nat;
     NATNode  _in_use;
 
+    /* Available to ICMP */
+    using AddrMap = std::unordered_map<std::string, OriginData>;
+    AddrMap  _addrmap;
+
     void init();
 
+    /* TODO: Using skiplist to optimize */
     NATNode* lookup(int port);
     NATNode* lookup(const std::string& addr, int port);
 
@@ -54,7 +64,7 @@ private:
     void append(NATNode *list, NATNode *node);
 
     /* Prune _in_use when _nat is empty */
-    void prune();
+    void prune(int timeout);
 
     bool empty(const NATNode *list);
 };

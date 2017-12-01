@@ -66,11 +66,11 @@ void Server::client2server() {
 
         trans->set_sport(_nat.snat(ip->saddr(), trans->sport(), sock));
         ip->set_saddr(_tun.ip());
-
-        _tun.write(ip->raw_data(), ip->size());
     } else {
-        return ;
+        _nat.snat(ip->saddr(), ip->daddr(), sock);
+        ip->set_saddr(_tun.ip());
     }
+    _tun.write(ip->raw_data(), ip->size());
 
 #ifdef DEBUG
     std::cout << "from client to server" << std::endl;
@@ -88,20 +88,27 @@ void Server::server2client() {
         return ;
     }
 
+    std::shared_ptr<OriginData> origin;
     if (ip->protocol() == P_TCP || ip->protocol() == P_UDP) {
         /* Safe down cast */
         TransLayer *trans = dynamic_cast<TransLayer*>(ip->inner());
         assert(trans != nullptr);
-        std::shared_ptr<OriginData> origin = _nat.dnat(trans->dport());
+        origin = _nat.dnat(trans->dport());
+        if (origin == nullptr) {
+            return ;
+        }
 
         ip->set_daddr(origin->addr);
         trans->set_dport(origin->port);
-
-        _socket.sendto(ip->raw_data(), ip->size(),
-                reinterpret_cast<struct sockaddr*>(&(origin->sock)), sizeof(origin->sock));
     } else {
-        return ;
+        origin = _nat.dnat(ip->saddr());
+        if (origin == nullptr) {
+            return ;
+        }
+        ip->set_daddr(origin->addr);
     }
+    _socket.sendto(ip->raw_data(), ip->size(),
+            reinterpret_cast<struct sockaddr*>(&(origin->sock)), sizeof(origin->sock));
 
 #ifdef DEBUG
     std::cout << "from server to client" << std::endl;
@@ -119,7 +126,8 @@ std::shared_ptr<IP> Server::get_ip_packet(char *buf, int size) {
     std::shared_ptr<IP> ip(new IP(buf, size, IP::ALLOC));
 
     if (ip->protocol() != P_TCP
-            && ip->protocol() != P_UDP) {
+            && ip->protocol() != P_UDP
+            && ip->protocol() != P_ICMP) {
         return nullptr;
     }
 

@@ -4,6 +4,7 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#include <linux/icmp.h>
 #include <arpa/inet.h>
 
 #include <string>
@@ -16,13 +17,16 @@ enum Protocol {
     P_TCP,
     P_UDP,
     P_IP,
-    P_NSY  // Not support yet 
+    P_NSY  // Not support yet
 };
 
 class Inner {
 public:
     Inner() = default;
     virtual ~Inner() {  }
+
+    virtual int checksum() = 0;
+    virtual void calc_checksum(const struct iphdr *ip) = 0;
 };
 
 class TransLayer : public Inner {
@@ -36,9 +40,6 @@ public:
     virtual int dport() = 0;
     virtual int set_sport(int port) = 0;
     virtual int set_dport(int port) = 0;
-
-    virtual int checksum() = 0;
-    virtual void calc_checksum(const struct iphdr *ip) = 0;
 };
 
 class TCP : public TransLayer {
@@ -79,10 +80,17 @@ private:
     struct udphdr *_udp;
 };
 
-// TODO
 class ICMP : public Inner {
 public:
+    ICMP(char *data);
+    ~ICMP() = default;
+    ICMP& operator=(const ICMP&) = delete;
+    ICMP(const ICMP&) = delete;
+
+    int checksum() { return ntohs(_icmp->checksum); };
+    void calc_checksum(const struct iphdr *ip);
 private:
+    struct icmphdr* _icmp;
 };
 
 class IP {

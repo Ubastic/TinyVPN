@@ -4,8 +4,6 @@
 #include <stdio.h>
 #include <time.h>
 
-#include <iostream>
-
 namespace vpn {
 
 NAT::NAT() : _nat(-1), _in_use(-1) {
@@ -29,7 +27,7 @@ void NAT::init() {
 
 int NAT::snat(const std::string& addr, int port, struct sockaddr_in sock) {
     if (empty(&_nat)) {
-        prune();
+        prune(75000);
     }
     assert(!empty(&_nat));
 
@@ -44,7 +42,6 @@ int NAT::snat(const std::string& addr, int port, struct sockaddr_in sock) {
     }
     node->use = time(nullptr);
     node->sock = sock;
-    std::cout << "snat " << addr << ":" << port  << "->" << node->new_port << std::endl;
     return node->new_port;
 }
 
@@ -53,8 +50,19 @@ std::shared_ptr<OriginData> NAT::dnat(int port) {
     if (node == nullptr) {
         return nullptr;
     }
-    std::cout << "dnat " << port  << "->" << node->addr << ":" << node->port << std::endl;
     return std::make_shared<OriginData>(OriginData{node->sock, node->addr, node->port});
+}
+
+void NAT::snat(const std::string& saddr, const std::string& daddr, struct sockaddr_in sock) {
+    _addrmap[daddr] = OriginData{sock, saddr, 0};
+}
+
+std::shared_ptr<OriginData> NAT::dnat(const std::string& daddr) {
+    auto it = _addrmap.find(daddr);
+    if (it == _addrmap.end()) {
+        return nullptr;
+    }
+    return std::make_shared<OriginData>(it->second);
 }
 
 void NAT::remove(NATNode *node) {
@@ -92,7 +100,8 @@ NATNode* NAT::lookup(const std::string& addr, int port) {
 }
 
 NAT::~NAT() {
-    assert(!empty(&_in_use));
+    prune(0);
+    assert(empty(&_in_use));
 
     NATNode *node = _nat.next;
     while (node != &_nat) {
@@ -102,15 +111,12 @@ NAT::~NAT() {
     }
 }
 
-void NAT::prune() {
-    /* 75s */
-    static const time_t TIMEOUT = 75000;
-
+void NAT::prune(int timeout) {
     time_t now = time(nullptr);
     NATNode *node = _in_use.next;
     while (node != &_in_use) {
         NATNode *next = node->next;
-        if (now - node->use >= TIMEOUT) {
+        if (now - node->use >= timeout) {
             remove(node);
             append(&_nat, node);
         }

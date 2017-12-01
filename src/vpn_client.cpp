@@ -3,10 +3,6 @@
 #include <arpa/inet.h>
 #include <assert.h>
 
-#ifdef DEBUG
-#include <iostream>
-#endif
-
 namespace vpn {
 
 Client::Client(const std::string& addr, int port)

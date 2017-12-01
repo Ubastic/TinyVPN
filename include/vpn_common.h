@@ -9,6 +9,17 @@
 #include <string>
 #include <vector>
 
+/* TODO: Add unit test */
+#ifdef UNIT_TEST
+#define  VPN_PUBLIC     public
+#define  VPN_PROTECTED  public
+#define  VPN_PRIVATE    public
+#else
+#define  VPN_PUBLIC     public
+#define  VPN_PROTECTED  protected
+#define  VPN_PRIVATE    private
+#endif
+
 namespace vpn {
 
 class Tun {
