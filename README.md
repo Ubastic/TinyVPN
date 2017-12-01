@@ -2,6 +2,8 @@
 
 一个用来学习的简易vpn，基于tun隧道实现
 
+![](https://github.com/wonter/TinyVPN/blob/master/topology.png?raw=true)
+
 # 安装
 
 TinyVPN使用了gflags第三方库，使用cmake编译
